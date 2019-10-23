@@ -26,3 +26,10 @@ logos/
 
 # Ignore macOS-specific files.
 .DS_Store
+
+# Ignore the Jenkinsfile to avoid changes in it while developing to invalidate
+# all layers.
+Jenkinsfile*
+
+# Ignore the directory created by Jenkins for the project.
+project/

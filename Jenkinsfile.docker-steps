@@ -1,0 +1,99 @@
+/*
+ * Copyright (C) 2020 Bosch Software Innovations GmbH
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ * License-Filename: LICENSE
+ */
+
+final DOCKER_BUILD_ARGS = '--build-arg http_proxy=$http_proxy --build-arg https_proxy=$https_proxy'
+
+// Disable the entry point to work around https://issues.jenkins-ci.org/browse/JENKINS-51307.
+final DOCKER_RUN_ARGS = '-e http_proxy -e https_proxy --entrypoint=""'
+
+pipeline {
+    agent none
+
+    parameters {
+        string(
+            name: 'VCS_URL',
+            description: 'VCS clone URL of the project',
+            defaultValue: 'https://github.com/vdurmont/semver4j.git'
+        )
+
+        string(
+            name: 'VCS_REVISION',
+            description: 'VCS revision of the project (prefix tags with "refs/tags/")',
+            defaultValue: 'master'
+        )
+
+        booleanParam(
+            name: 'ALLOW_DYNAMIC_VERSIONS',
+            defaultValue: false,
+            description: 'Allow dynamic versions of dependencies (support projects without lock files)'
+        )
+
+        booleanParam(
+            name: 'USE_CLEARLY_DEFINED_CURATIONS',
+            defaultValue: true,
+            description: 'Use package curation data from the ClearlyDefined service'
+        )
+
+        choice(
+            name: 'LOG_LEVEL',
+            description: 'Log message level',
+            choices: ['--info', '--debug', '']
+        )
+    }
+
+    stages {
+        stage('Clone project') {
+            agent any
+
+            steps {
+                sh 'rm -fr project'
+
+                // See https://jenkins.io/doc/pipeline/steps/git/.
+                checkout([$class: 'GitSCM',
+                    userRemoteConfigs: [[url: params.VCS_URL]],
+                    branches: [[name: "${params.VCS_REVISION}"]],
+                    extensions: [[$class: 'RelativeTargetDirectory', relativeTargetDir: 'project/source']]
+                ])
+            }
+        }
+
+        stage('Run the ORT analyzer') {
+            agent {
+                dockerfile {
+                    additionalBuildArgs DOCKER_BUILD_ARGS
+                    args DOCKER_RUN_ARGS
+                }
+            }
+
+            steps {
+                sh '''
+                    if [ "$ALLOW_DYNAMIC_VERSIONS" = "true" ]; then
+                        ALLOW_DYNAMIC_VERSIONS_PARAM="--allow-dynamic-versions"
+                    fi
+
+                    if [ "$USE_CLEARLY_DEFINED_CURATIONS" = "true" ]; then
+                        USE_CLEARLY_DEFINED_CURATIONS_PARAM="--clearly-defined-curations"
+                    fi
+
+                    /opt/ort/bin/ort $LOG_LEVEL analyze $ALLOW_DYNAMIC_VERSIONS_PARAM $USE_CLEARLY_DEFINED_CURATIONS_PARAM -f JSON,YAML -i project/source -o project/results/analyzer
+                '''
+            }
+        }
+    }
+}
