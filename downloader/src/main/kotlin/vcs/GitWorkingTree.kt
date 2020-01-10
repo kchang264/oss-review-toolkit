@@ -61,8 +61,7 @@ open class GitWorkingTree(workingDir: File, private val gitBase: GitBase) : Work
 
     override fun getNested(): Map<String, VcsInfo> =
         runCatching {
-            // This throws a NullPointerException if "repo" is null.
-            val paths = listSubmodulePaths(repo!!)
+            val paths = listSubmodulePaths(repo)
             paths.associateWith { GitWorkingTree(repo.workTree.resolve(it), gitBase).getInfo() }
         }.getOrElse {
             emptyMap()
@@ -70,8 +69,7 @@ open class GitWorkingTree(workingDir: File, private val gitBase: GitBase) : Work
 
     override fun getRemoteUrl(): String =
         runCatching {
-            // This throws a NullPointerException if "repo" is null.
-            val remotes = org.eclipse.jgit.api.Git(repo!!).remoteList().call()
+            val remotes = org.eclipse.jgit.api.Git(repo).remoteList().call()
             val remoteForCurrentBranch = BranchConfig(repo.config, repo.branch).remote
 
             val remote = if (remotes.size <= 1 || remoteForCurrentBranch == null) {
